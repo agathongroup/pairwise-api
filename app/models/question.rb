@@ -70,13 +70,17 @@ class Question < ActiveRecord::Base
   end
 
   def choose_prompt(options = {})
+    logger.info("Choose prompt options: #{options.inspect}")
 
           # if there is one or fewer active choices, we won't be able to find a prompt
     if self.choices.size - self.inactive_choices_count <= 1 
       raise RuntimeError, "More than one choice needs to be active"
     end
 
-    if self.uses_catchup? || options[:algorithm] == "catchup"
+    if options[:visitor]
+      logger.info("Question #{self.id} is using unseen-random algorithm!")
+      return choose_unseen_prompt(options[:visitor])
+    elsif self.uses_catchup? || options[:algorithm] == "catchup"
         logger.info("Question #{self.id} is using catchup algorithm!")
         next_prompt = self.pop_prompt_queue
         if next_prompt.nil?
@@ -93,6 +97,38 @@ class Question < ActiveRecord::Base
         return self.simple_random_choose_prompt
     end
           
+  end
+
+  def choose_unseen_prompt(visitor)
+    seen_choices = visitor.appearance_choice_tuples(self)
+    active_choices = Choice.all(
+      :select => "id",
+      :conditions => {:question_id => self.id, :active => true},
+      :order => "id ASC",
+    ).map { |c| c.id }
+    # Create array of all prompt options. For simplicity,
+    # first choice has the lower id of the two.
+    prompt_options = []
+    active_choices.each_with_index do |left_choice_id, index|
+      active_choices[index+1..-1].each do |right_choice_id|
+        prompt_options << [left_choice_id, right_choice_id]
+      end
+    end
+    unseen_options = prompt_options - seen_choices
+    if defined? unseen_options.sample
+      chosen_tuple = unseen_options.sample
+    elsif defined? unseen_options.choice
+      chosen_tuple = unseen_options.choice
+    else
+      chosen_tuple = unseen_options.first
+    end
+    if chosen_tuple.nil?
+      return Prompt.new
+    end
+    prompt = prompts.find_or_initialize_by_left_choice_id_and_right_choice_id(chosen_tuple[0], chosen_tuple[1])
+    prompt.algorithm = {:name => 'unseen-random'}
+    prompt.save
+    prompt
   end
 
   #TODO: generalize for prompts of rank > 2
@@ -178,7 +214,6 @@ class Question < ActiveRecord::Base
   end
 
   def get_optional_information(params)
-
     return {} if params.nil?
 
     result = {}
@@ -223,7 +258,7 @@ class Question < ActiveRecord::Base
       end 
     
       if !@prompt 
-        @prompt = choose_prompt(:algorithm => params[:algorithm])
+        @prompt = choose_prompt(:algorithm => params[:algorithm], :visitor => visitor)
       end
       result.merge!({:picked_prompt_id => @prompt.id})
     end 
@@ -704,7 +739,7 @@ class Question < ActiveRecord::Base
           # Only choose prompt if we don't already have one. If we had to
           # retry this transaction due to a deadlock, a prompt may have been
           # selected previously.
-          prompt = choose_prompt(:algorithm => params[:algorithm]) unless prompt
+          prompt = choose_prompt(:algorithm => params[:algorithm], :visitor => visitor) unless prompt
           appearance = self.site.record_appearance(visitor, prompt)
         end
       end

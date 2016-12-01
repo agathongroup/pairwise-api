@@ -46,7 +46,7 @@ class Prompt < ActiveRecord::Base
   end
   
   def left_choice_text(prompt = nil)
-    left_choice.data
+    left_choice.try(:data)
   end
   
   def active?
@@ -55,7 +55,7 @@ class Prompt < ActiveRecord::Base
   
   
   def right_choice_text(prompt = nil)
-    right_choice.data
+    right_choice.try(:data)
   end
   
 end

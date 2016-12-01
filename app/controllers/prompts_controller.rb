@@ -30,7 +30,12 @@ class PromptsController < InheritedResources::Base
               format.xml { render :xml => @prompt.to_xml, :status => :conflict and return} 
            end
        end
-       object = @question.prompts.find(@question_optional_information.delete(:picked_prompt_id))
+       picked_prompt_id = @question_optional_information.delete(:picked_prompt_id)
+       if picked_prompt_id
+         object = @question.prompts.find(picked_prompt_id)
+       else
+         object = Prompt.new
+       end
        @question_optional_information.each do |key, value|
           optional_information << Proc.new { |options| options[:builder].tag!(key, value)}
        end

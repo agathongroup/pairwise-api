@@ -15,6 +15,15 @@ class Visitor < ActiveRecord::Base
   def owns?(question)
     questions.include? question
   end
+
+  def appearance_choice_tuples(question)
+    c = Prompt.connection
+    sql = "SELECT left_choice_id, right_choice_id FROM prompts
+            INNER JOIN appearances ON prompts.id = appearances.prompt_id
+            WHERE prompts.question_id = #{c.quote(question.id)}
+            AND appearances.voter_id = #{c.quote(self.id)}"
+    c.select_rows(sql)
+  end
   
   def vote_for!(options)
     return nil if !options || !options[:prompt] || !options[:direction]
