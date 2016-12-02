@@ -73,7 +73,12 @@ class PromptsController < InheritedResources::Base
            end
        end
 
-       response = @question.prompts.find(@question_optional_information.delete(:picked_prompt_id))
+       picked_prompt_id = @question_optional_information.delete(:picked_prompt_id)
+       if picked_prompt_id
+         response = @question.prompts.find(picked_prompt_id)
+       else
+         response = @question.prompts.new
+       end
        @question_optional_information.each do |key, value|
           optional_information << Proc.new { |options| options[:builder].tag!(key, value)}
        end
